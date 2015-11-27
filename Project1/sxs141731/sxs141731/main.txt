@@ -1,0 +1,168 @@
+#include <iostream>
+#include "rv.h"
+#include "event.h"
+#include <math.h>
+
+int main()
+{  
+  using namespace std;
+  EventList Elist;                             // Linked List Declaration.
+  enum {ARR,DEP};                 
+
+  double lambda;            
+  double mu;                
+  int m = 2;
+  int K;
+  double lamb[10];
+  
+  cout << "Enter the Value of K" << endl;
+  cin >> K;
+  cout << "Enter the Value of Mu" << endl;
+  cin >> mu;
+  
+  lamb[0] = 0.1*m*mu;                           //Array to Store different Lambda.
+  lamb[1] = 0.2*m*mu;
+  lamb[2] = 0.3*m*mu;
+  lamb[3] = 0.4*m*mu;
+  lamb[4] = 0.5*m*mu;
+  lamb[5] = 0.6*m*mu;
+  lamb[6] = 0.7*m*mu;
+  lamb[7] = 0.8*m*mu;
+  lamb[8] = 0.9*m*mu;
+  lamb[9] = m*mu;
+  
+  for(int i = 0; i<=9 ;i++){                    //Initiating the Loop.
+  lambda = lamb[i];
+  
+  double clock = 0.0;             
+  int N = 0;                                    //No. in System.
+  int arrival = 0;                              //No. of Arrivals.
+  int Ndep = 0;                                 //No. of Departures.
+  int blocked = 0;                              //No. of Blocked.
+  int utils = 0;                              
+  double EN = 0.0; 
+  double random_no;                              
+  random_no = uni_rv();                          //From rv.h header.
+  
+  int done = 0;                   
+
+  Event* CurrentEvent;                           //Pointer to point to Linked List. 
+
+  Elist.insert(exp_rv(lambda),ARR);           
+
+  while (!done)
+  {
+    CurrentEvent = Elist.get();               
+    double prev = clock;                      
+    clock=CurrentEvent->time;                  
+    switch (CurrentEvent->type) {
+    case ARR:
+                                      
+        if(N>=2*K){                                       //Checking if No. in System > K.
+            blocked++;                                    //Blocked if true.
+            Elist.insert(clock+exp_rv(lambda),ARR);
+        } 
+        
+        else if(N>=K && N<2*K){
+            if(random_no>0.5){                            //Randomly Block arrivals with 50% Probability
+                blocked++; 
+                Elist.insert(clock+exp_rv(lambda),ARR);
+            }
+            else
+            {
+                    EN = EN + N*(clock-prev);
+                    arrival++;                            //Increment Arrivals
+                    N++;                                  //Increment Total No. in System.
+                    Elist.insert(clock+exp_rv(lambda),ARR);
+                }
+            }
+                
+        else if(N<K){
+                EN = EN + N*(clock-prev);                //No blocking, if No. < K. 
+                arrival++;
+                N++;
+                Elist.insert(clock+exp_rv(lambda),ARR);
+            }
+               
+        if(N==1){
+            Elist.insert(clock+exp_rv(mu),DEP);           //Generate Departure Event.
+        }
+        
+        if(N<K){                                          //Utilization.
+            utils = utils + (1/m)*(clock-prev);           //One server active when N < K.
+        }
+        else if(N>=K){                                    //Two servers active when N >= K.
+            utils = utils + (clock-prev);
+        }
+        
+        break;
+      
+      case DEP:                                            //Generating Departure Event.
+      EN = EN + N*(clock-prev);                         
+      N--;                                    
+      Ndep++;
+              
+      if (N > 0){
+          Elist.insert(clock+exp_rv(mu),DEP);
+        }
+    }
+        
+    if(N<K){                                              //Utilization.
+        utils = utils + (1/m)*(clock-prev);               //One server active when N < K. 
+    }
+    else if(N>=K){                      
+        utils = utils + (clock-prev);                     //Two servers active when N >= K.
+    }
+    
+    delete CurrentEvent;                                  //Delete the Pointer.
+    if (Ndep > 100000) done=1;                            //Exit Condition.
+  }
+
+  cout << "\nFOR RHO = " << (lambda)/(m*mu) << endl;
+  cout << "Simulation: " << endl;
+  cout << "(Simulation) E[n] = " << EN/clock << endl;;
+  cout << "(Simulation) E[t] = " << EN/arrival << endl;
+  cout << "(Simulation) Blocking Probability = " << double(blocked)/double(arrival) << endl ; 
+  cout << "(Simulation) Utilization = " << utils/clock << endl;
+  
+  //Theoretical Calculation:
+  
+  double lamb_mu;                                          //Lambda/Mu.
+  double ENT;                                              //Theoretical Expected Number.
+  double lambEff;                                          //Lambda Effective.
+  double ET;                                               //Theoretical Expected Time.
+  double util;                                             //Theoretical Utilization.
+  double blockprob;                                        //Theoretical Blocking Probability.
+  lamb_mu = lambda/mu;
+  
+  double p[7];
+  for(int j=0 ; j<=6 ; j++){
+      p[j]=0;
+  }
+  
+  /*Steady State Probabilities*/
+  p[0] = 1/(1+lamb_mu+pow(lamb_mu,2)+pow(lamb_mu,3)+((pow(lamb_mu,4))*(1/4))+((pow(lamb_mu,5))*(1/16))+((pow(lamb_mu,6))*(1/64)));
+  p[1] = lamb_mu*p[0];
+  p[2] = pow(lamb_mu,2)*p[0];
+  p[3] = pow(lamb_mu,3)*p[0];
+  p[4] = pow(lamb_mu,4)*(1/4)*p[0];
+  p[5] = pow(lamb_mu,5)*(1/16)*p[0];
+  p[6] = pow(lamb_mu,6)*(1/64)*p[0];
+  
+  /*Performance Metrics*/
+  ENT = p[1]+(2*p[2])+(3*p[3])+(4*p[4])+(5*p[5])+(6*p[6]);
+  lambEff = (lambda*p[0])+(lambda*p[1])+(lambda*p[2])+((lambda/2)*p[3])+((lambda/2)*p[4])+((lambda/2)*p[5]);
+  ET = ENT/lambEff;
+  util = (0.5*p[1])+p[2]+p[3]+p[4]+p[5]+p[6];
+  blockprob = (0.5*p[3])+(0.5*p[4])+(0.5*p[5])+p[6];
+  
+  cout << "\nTheoretical:" << endl;
+  cout << "(Theoretical) E[n] = " << ENT << endl;
+  cout << "(Theoretical) E[t] = " << ET << endl;
+  cout << "(Theoretical) Blocking Probability = " << blockprob << endl;
+  cout << "(Theoretical) Utilization = " << util << endl;
+    
+  cout << "------------------------------------------------" << endl;
+  cout << "------------------------------------------------" ;
+  }
+}

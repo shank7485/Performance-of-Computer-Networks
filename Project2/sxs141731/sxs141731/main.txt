@@ -1,0 +1,336 @@
+#include <iostream>
+#include <cstdlib> 
+#include "rv.h"
+#include "event.h"
+
+int main() {
+    using namespace std;
+    EventList Elist;
+
+    enum {
+        ARRH, ARRL, DEP1H, DEP1L, TRANS12H, TRANS12L, DEP2H, DEP2L //Types of Cases.
+    };
+
+    double lambda = 0; //Initial Declaration.
+    double lambdaL = 0;
+    double lambdaH = 0;
+    double mu1 = 0;
+    double mu2 = 0;
+    double pL = 0;
+    double pH = 0;
+    double r2d = 0;
+    double r21 = 0;
+    double a1 = 0;
+    double a2 = 0;
+
+    cout << "Enter the Value of pH in decimal" << endl;
+    cin >> pH;
+    pL = 1 - pH;
+    cout << "Enter the Value of a1 in decimal" << endl;
+    cin >> a1;
+    a1 = a2;
+    cout << "Enter the Value of r2d in decimal " << endl;
+    cin >> r2d;
+    r21 = 1 - r2d;
+    cout << "Enter the Value of mu1: " << endl;
+    cin >> mu1;
+    cout << "Enter the Value of mu2: " << endl;
+    cin >> mu2;
+
+    for (int i = 1; i < 11; i++) {
+        lambda = i;
+        lambdaL = (lambda * pL);
+        lambdaH = (lambda * pH);
+
+        double clock = 0;
+        int N1H = 0;
+        int N2H = 0;
+        int N1L = 0;
+        int N2L = 0;
+        int N1 = 0;
+        int N2 = 0;
+
+        int Ndep = 0;
+        int Narr = 0;
+        int N1Harr = 0;
+        int N1Larr = 0;
+        int N2Harr = 0;
+        int N2Larr = 0;
+
+        double EN1 = 0;
+        double EN2 = 0;
+        double EN1H = 0;
+        double EN1L = 0;
+        double EN2H = 0;
+        double EN2L = 0;
+
+        int done = 0;
+
+        Event* CurrentEvent;
+
+        double uni = uni_rv();
+
+        if (uni < pH) { //Insert Low or High Priority Arrival.
+            Elist.insert(exp_rv(lambdaH), ARRH);
+        } else {
+            Elist.insert(exp_rv(lambdaL), ARRL);
+        }
+
+        while (!done) {
+
+            double unifrv = uni_rv();
+
+            CurrentEvent = Elist.get();
+            double prev;
+            prev = clock;
+            clock = CurrentEvent->time;
+
+            switch (CurrentEvent->type) {
+                case ARRH:
+                    if (unifrv < a1) { //Check if Customer is going into Server 1 or 2.
+                        EN1 += N1 * (clock - prev);
+                        N1++;
+                        EN1H += N1H * (clock - prev);
+                        N1H++;
+                        N1Harr++;
+
+                        if (unifrv < pH) { //Generate further Low or High Arrivals.
+                            Elist.insert(clock + exp_rv(lambdaH), ARRH);
+                        } else {
+                            Elist.insert(clock + exp_rv(lambdaL), ARRL);
+                        }
+
+                        if (N1H == 1) {
+                            Elist.insert(clock + exp_rv(mu1), DEP1H);
+                        }
+                    } else { //Going into Server 2.
+
+                        EN2 += N2 * (clock - prev);
+                        N2++;
+                        EN2H += N2H * (clock - prev);
+                        N2H++;
+                        N2Harr++;
+
+                        if (unifrv < pH) { //Generate further Low or High Arrivals.
+                            Elist.insert(clock + exp_rv(lambdaH), ARRH);
+                        } else {
+                            Elist.insert(clock + exp_rv(lambdaL), ARRL);
+                        }
+
+                        if (N2H == 1) {
+                            Elist.insert(clock + exp_rv(mu2), DEP2H);
+                        }
+                    }
+
+                    break;
+
+                case ARRL: //Low priority Arrival for Second Server.
+                    EN1 += N1 * (clock - prev);
+                    N1++;
+                    EN1L += N1L * (clock - prev);
+                    N1L++;
+                    N1Larr++;
+
+                    if (unifrv < pH) {
+                        Elist.insert(clock + exp_rv(lambdaH), ARRH);
+                    } else {
+                        Elist.insert(clock + exp_rv(lambdaL), ARRL);
+                    }
+
+                    if (N1L == 1) {
+                        Elist.insert(clock + exp_rv(mu1), DEP1L);
+                    }
+                    break;
+
+
+                case DEP1H: //Departure of High Priority from First Server.  
+                    EN1 += N1 * (clock - prev);
+                    N1--;
+                    EN1H += N1H * (clock - prev);
+                    N1H--;
+                    Elist.insert(clock + exp_rv(mu1), TRANS12H); //Insert TRANS12H for carrying High from Server 1 to 2. 
+
+                    if (N1H > 0) {
+                        Elist.insert(clock + exp_rv(mu1), DEP1H);
+                    }
+
+                    break;
+
+                case DEP1L: //Departure of Low Priority from First Server
+                    EN1 += N1 * (clock - prev);
+                    N1--;
+                    EN1L += N1L * (clock - prev);
+                    N1L--;
+                    Elist.insert(clock + exp_rv(mu1), TRANS12L); //Insert TRANS12L for carrying Low from Server 1 to 2. 
+
+                    if (N1L > 0) {
+                        Elist.insert(clock + exp_rv(mu1), DEP1L);
+                    }
+
+                    break;
+
+                case TRANS12H: //Transfer High Priority Customers from First to Second Server.
+
+                    EN2 += N2 * (clock - prev);
+                    N2++;
+                    EN2H += N2H * (clock - prev);
+                    N2H++;
+                    N2Harr++;
+
+                    if (N2H == 1) {
+                        Elist.insert(clock + exp_rv(mu2), DEP2H);
+                    }
+                    break;
+
+
+                case TRANS12L: //Transfer Low Priority Customers from First to Second Server.
+                    EN2 += N2 * (clock - prev);
+                    N2++;
+                    EN2L += N2L * (clock - prev);
+                    N2L++;
+                    N2Larr++;
+
+                    if (N2L == 1) {
+                        Elist.insert(clock + exp_rv(mu2), DEP2L);
+                    }
+                    break;
+
+                case DEP2H: //Departure event from Second server for High priority Customers.
+
+                    EN2 += N2 * (clock - prev);
+                    N2--;
+                    EN2H += N2H * (clock - prev);
+                    N2H--;
+
+                    if (unifrv < r2d) { //Check if customer leaves the network or goes back for getting served again.
+                        EN1 += N1 * (clock - prev);
+                        N1++;
+                        EN1H += N1H * (clock - prev);
+                        N1H++;
+                        N1Harr++;
+
+                        if (N1H == 1) {
+                            Elist.insert(clock + exp_rv(mu1), DEP1H);
+                        }
+                    } else {
+                        Ndep++;
+                    }
+
+                    if (N2H > 0) {
+                        Elist.insert(clock + exp_rv(mu2), DEP2H);
+                    }
+
+                    break;
+
+                case DEP2L: //Departure event from Second server for Low priority Customers
+
+                    EN2 += N2 * (clock - prev);
+                    N2--;
+                    EN2L += N2L * (clock - prev);
+                    N2L--;
+
+                    if (unifrv < r2d) { //Check if customer leaves the network or goes back to server 1 for getting served.
+                        EN1 += N1 * (clock - prev);
+                        N1++;
+                        EN1L += N1L * (clock - prev);
+                        N1L++;
+                        N1Larr++;
+
+                        if (N1L == 1) {
+                            Elist.insert(clock + exp_rv(mu1), DEP1L);
+                        }
+                    } else {
+                        Ndep++;
+                    }
+
+                    if (N2L > 0) {
+                        Elist.insert(clock + exp_rv(mu2), DEP2L);
+                    }
+
+                    break;
+            }
+            delete CurrentEvent;
+            if (Ndep > 500000) done = 1;
+        }
+        //Theoretical Calculation:
+
+        double theta1, theta2, rho1, rho2, expN1, expN2, lamb;
+        double theta1H, theta2H, rho1H, rho2H, expN1H, expN2H, expT2H;
+        double theta1L, theta2L, rho1L, rho2L, expN1L, expN2L, expT2L;
+
+        lamb = lambdaH + lambdaL;
+        theta1 = (3.5 * lambdaH)+(4 * lambdaL);
+        theta2 = 4 * lamb;
+        theta1H = 3.5 * lambdaH;
+        theta2H = 4 * lambdaH;
+        theta1L = 4 * lambdaL;
+        theta2L = 4 * lambdaL;
+        rho1 = theta1 / mu1;
+        rho2 = theta2 / mu2;
+        rho1H = theta1H / mu1;
+        rho2H = theta2H / mu2;
+        rho1L = theta1L / mu1;
+        rho2L = theta2L / mu2;
+        expN1 = (rho1) / (1 - rho1);
+        expN2 = (rho2) / (1 - rho2);
+        expN1H = (rho1H) / (1 - rho1H);
+        expN2H = (rho2H) / (1 - rho2H);
+        expT2H = expN2H / theta2H;
+        expN1L = (rho1L) / (1 - rho1L);
+        expN2L = (rho2L) / (1 - rho2L);
+        expT2L = expN2L / theta2L;
+
+        cout << "------------------------------------------------------------------------------" << endl;
+        cout << "For Lambda Value = " << lambda << endl;
+        cout << "------------------------------------------------------------------------------";
+
+        cout << "                                                                                                          Simulation       Theoretical" << endl;
+        cout << "Throughput of High Priority Customer in Q1:      " << N1Harr / clock;
+        cout << "            " << theta1H << endl;
+        cout << endl;
+
+        cout << "Throughput of Low Priority Customer in Q1:       " << N1Larr / clock;
+        cout << "            " << theta1L << endl;
+        cout << endl;
+
+        cout << "Throughput of High Priority Customer in Q2:      " << N2Harr / clock;
+        cout << "            " << theta2H << endl;
+        cout << endl;
+
+        cout << "Throughput of Low Priority Customer in Q2:       " << N2Larr / clock;
+        cout << "            " << theta2L << endl;
+        cout << endl;
+
+        cout << "Expected number of Customers in Q1:              " << EN1 / clock;
+        cout << "            " << expN1 << endl;
+        cout << endl;
+
+        cout << "Expected number of Customers in Q2:              " << EN2 / clock;
+        cout << "            " << expN2 << endl;
+        cout << endl;
+
+        cout << "Expected number of High Priority in Q1:          " << EN1H / clock;
+        cout << "            " << expN1H << endl;
+        cout << endl;
+
+        cout << "Expected number of Low Priority in Q1:           " << EN1L / clock;
+        cout << "            " << expN1L << endl;
+        cout << endl;
+
+        cout << "Expected number of High Priority in Q2:          " << EN2H / clock;
+        cout << "            " << expN2H << endl;
+        cout << endl;
+
+        cout << "Expected number of Low Priority in Q2:           " << EN2L / clock;
+        cout << "            " << expN2L << endl;
+        cout << endl;
+
+        cout << "Expected Time of High Priority in Q2:            " << EN2H / N2Harr;
+        cout << "            " << expT2H << endl;
+        cout << endl;
+
+        cout << "Expected Time of Low Priority in Q2:             " << EN2L / N2Larr;
+        cout << "            " << expT2L << endl;
+        cout << endl;
+    }
+}
